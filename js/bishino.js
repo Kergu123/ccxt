@@ -3,7 +3,8 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { ArgumentsRequired, AuthenticationError, DDoSProtection, ExchangeError, InvalidOrder, OrderNotFound, PermissionDenied, InsufficientFunds } = require ('./base/errors');
+const { ExchangeError, InvalidOrder } = require ('./base/errors');
+const { ROUND } = require ('./base/functions/number');
 
 //  ---------------------------------------------------------------------------
 
@@ -16,24 +17,24 @@ module.exports = class bishino extends Exchange {
             'rateLimit': 500,
             'version': 'v1',
             'has': {
-              'fetchDepositAddress': true,
-              'CORS': false,
-              'cancelOrder': true,
-              'createOrder': true,
-              'fetchBidsAsks': true,
-              'fetchTickers': true,
-              'fetchOHLCV': true,
-              'fetchTrades': true,
-              'fetchMyTrades': true,
-              'fetchOrder': true,
-              'fetchOrders': true,
-              'fetchOpenOrders': true,
-              'fetchClosedOrders': true,
-              'withdraw': true,
-              'fetchFundingFees': true,
-              'fetchDeposits': true,
-              'fetchWithdrawals': true,
-              'fetchTransactions': false,
+                'fetchDepositAddress': true,
+                'CORS': false,
+                'cancelOrder': true,
+                'createOrder': true,
+                'fetchBidsAsks': true,
+                'fetchTickers': true,
+                'fetchOHLCV': true,
+                'fetchTrades': true,
+                'fetchMyTrades': true,
+                'fetchOrder': true,
+                'fetchOrders': true,
+                'fetchOpenOrders': true,
+                'fetchClosedOrders': true,
+                'withdraw': true,
+                'fetchFundingFees': true,
+                'fetchDeposits': true,
+                'fetchWithdrawals': true,
+                'fetchTransactions': false,
             },
             'timeframes': {
                 '5m': '5min',
@@ -62,23 +63,23 @@ module.exports = class bishino extends Exchange {
                 },
                 'private': {
                     'get': [
-                      'offer_by_id',
-                      'offers_by_account',
-                      'active_offers_by_account',
-                      'completed_offers_by_account',
-                      'trades_by_account',
-                      'deposits',
-                      'withdrawals',
+                        'offer_by_id',
+                        'offers_by_account',
+                        'active_offers_by_account',
+                        'completed_offers_by_account',
+                        'trades_by_account',
+                        'deposits',
+                        'withdrawals',
                     ],
                     'post': [
-                      'auth/withdraw',
-                      'auth/limit',
-                      'auth/market',
-                      'auth/limit_trigger',
-                      'auth/market_trigger',
-                      'auth/stop',
-                      'auth/icebergs',
-                      'auth/cancel',
+                        'auth/withdraw',
+                        'auth/limit',
+                        'auth/market',
+                        'auth/limit_trigger',
+                        'auth/market_trigger',
+                        'auth/stop',
+                        'auth/icebergs',
+                        'auth/cancel',
                     ],
                 },
             },
@@ -97,9 +98,9 @@ module.exports = class bishino extends Exchange {
                 },
             },
             'options': {
-              'recvWindow': 5 * 1000,
-              'timeDifference': 0,
-              'adjustForTimeDifference': false
+                'recvWindow': 5 * 1000,
+                'timeDifference': 0,
+                'adjustForTimeDifference': false,
             },
             'exceptions': {
                 '401': ExchangeError,
@@ -122,10 +123,11 @@ module.exports = class bishino extends Exchange {
 
     async fetchMarkets (params = {}) {
         let response = await this.publicGetPairs (this.extend ({}, params));
-        if (this.options['adjustForTimeDifference']) await this.loadTimeDifference ();
+        if (this.options['adjustForTimeDifference'])
+            await this.loadTimeDifference ();
         let markets = response['result'];
         let result = [];
-        let pairs = Object.keys(markets);
+        let pairs = Object.keys (markets);
         for (let i = 0; i < pairs.length; i++) {
             let id = pairs[i];
             let market = markets[id];
@@ -194,8 +196,10 @@ module.exports = class bishino extends Exchange {
 
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
+        const market = this.market (symbol);
+        let id = market['id'];
         let response = await this.publicGetTicker (this.extend ({}, params));
-        let ticker = response['result'][symbol.replace('/','_')];
+        let ticker = response['result'][id];
         return this.parseTicker (ticker, symbol);
     }
 
@@ -227,7 +231,7 @@ module.exports = class bishino extends Exchange {
         await this.loadMarkets ();
         let market = this.market (symbol);
         let request = {
-            'pair': market['id'].replace('/','_'),
+            'pair': market['id'].replace ('/', '_'),
         };
         if (limit !== undefined)
             request['limit'] = limit;
@@ -239,11 +243,11 @@ module.exports = class bishino extends Exchange {
     parseOHLCV (ohlcv, market = undefined, timeframe = '1m', since = undefined, limit = undefined) {
         return [
             ohlcv.open_time,
-            parseFloat (ohlcv.open),
-            parseFloat (ohlcv.high),
-            parseFloat (ohlcv.low),
-            parseFloat (ohlcv.close),
-            parseFloat (ohlcv.base_volume),
+            parseFloat (ohlcv['open']),
+            parseFloat (ohlcv['high']),
+            parseFloat (ohlcv['low']),
+            parseFloat (ohlcv['close']),
+            parseFloat (ohlcv['base_volume']),
         ];
     }
 
@@ -251,7 +255,7 @@ module.exports = class bishino extends Exchange {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
-            'pair': market['id']
+            'pair': market['id'],
         };
         if (since !== undefined) {
             request['start'] = since;
@@ -264,11 +268,11 @@ module.exports = class bishino extends Exchange {
     }
 
     parseTrade (trade, market = undefined) {
-        let timestamp = this.safeInteger (trade,'time');
-        let price = this.safeFloat (trade,'price');
+        let timestamp = this.safeInteger (trade, 'time');
+        let price = this.safeFloat (trade, 'price');
         let amount = this.safeFloat (trade, 'qty');
         let id = this.safeString (trade, 'id');
-        let symbol = this.safeString (trade, 'pair').replace('_','/');
+        let symbol = this.safeString (trade, 'pair').replace ('_', '/');
         let fee = {
             'cost': this.safeFloat (trade, 'net_commission'),
             'currency': this.commonCurrencyCode (trade['net_commission_asset']),
@@ -282,7 +286,7 @@ module.exports = class bishino extends Exchange {
             'fee': fee,
             'price': price,
             'amount': amount,
-            'cost': price * amount
+            'cost': price * amount,
         };
     }
 
@@ -316,18 +320,26 @@ module.exports = class bishino extends Exchange {
     parseOrder (order, market = undefined) {
         let status = this.parseStatus (this.safeString (order, 'status'));
         let symbol = this.findSymbol (this.safeString (order, 'pair'), market);
-        let timestamp = order['time'];;
+        let timestamp = order['time'];
         let price = this.safeFloat (order, 'price');
         let amount = this.safeFloat (order, 'qty_orig');
         let remaining = this.safeFloat (order, 'qty_remaining');
         let filled = amount - remaining;
         let cost = price * amount;
         let id = this.safeString (order, 'id');
-        let type = this.safeString (order, 'type').toLowerCase();
-        let side = this.safeString (order, 'side').toLowerCase();
+        let type = this.safeString (order, 'type').toLowerCase ();
+        let side = this.safeString (order, 'side').toLowerCase ();
         let fills = this.safeValue (order, 'fills');
         let trades = this.parseTrades (fills || [], market);
-        let average = trades && trades.length > 0 ? trades.map(e => e.price).reduce((a,b) => a+b, 0) / trades.length : price;
+        let average = price;
+        if (trades && trades.length > 0) {
+            let sum = 0;
+            for (let i = 0; i < trades.length; i++) {
+                let trade = trades[i];
+                sum += trade['price'];
+            }
+            average = sum / trades.length;
+        }
         price = average;
         let result = {
             'info': order,
@@ -344,7 +356,7 @@ module.exports = class bishino extends Exchange {
             'filled': filled,
             'remaining': remaining,
             'status': status,
-            'trades': trades
+            'trades': trades,
         };
         return result;
     }
@@ -352,7 +364,7 @@ module.exports = class bishino extends Exchange {
     async fetchOrder (id, symbol = undefined, params = {}) {
         await this.loadMarkets ();
         let request = {
-            'id': id
+            'id': id,
         };
         let response = await this.privateGetOfferById (this.extend (request, params));
         return this.parseOrder (response['result']);
@@ -376,7 +388,7 @@ module.exports = class bishino extends Exchange {
         await this.loadMarkets ();
         let market = undefined;
         if (symbol !== undefined) {
-          market = this.market (symbol);
+            market = this.market (symbol);
         }
         let request = {};
         if (since !== undefined) {
@@ -418,14 +430,14 @@ module.exports = class bishino extends Exchange {
     async fetchDeposits (code = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {};
-        let response = await this.privateGetDeposits(this.extend (request, params));
+        let response = await this.privateGetDeposits (this.extend (request, params));
         return this.parseTransactions (response['result'], undefined, since, limit);
     }
 
     async fetchWithdrawals (code = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {};
-        let response = await this.privateGetWithdrawals(this.extend (request, params));
+        let response = await this.privateGetWithdrawals (this.extend (request, params));
         return this.parseTransactions (response['result'], undefined, since, limit);
     }
 
@@ -438,8 +450,8 @@ module.exports = class bishino extends Exchange {
         for (let i = 0; i < ids.length; i++) {
             let id = ids[i];
             let code = this.commonCurrencyCode (id);
-            let asset = this.safeValue(detail, id);
-            let fees = this.safeValue(asset, 'fees');
+            let asset = this.safeValue (detail, id);
+            let fees = this.safeValue (asset, 'fees');
             withdrawFees[code] = this.safeFloat (fees, 'withdrawal');
             depositFees[code] = this.safeFloat (fees, 'deposit');
         }
@@ -456,7 +468,7 @@ module.exports = class bishino extends Exchange {
         let request = {
             'asset': code,
             'address': address,
-            'qty': parseFloat (amount)
+            'qty': parseFloat (amount),
         };
         let response = await this.privatePostAuthWithdraw (this.extend (request, params));
         return {
@@ -466,81 +478,73 @@ module.exports = class bishino extends Exchange {
     }
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
-      await this.loadMarkets ();
-      let market = this.market (symbol);
-      let test = this.safeValue (params, 'test', false);
-      let stopPrice = this.safeFloat (params, 'stopPrice');
-      let icebergs = this.safeFloat (params, 'icebergs');
-      let uppercaseType = type.toUpperCase ();
-      let priceIsRequired = false;
-      let triggerPriceIsRequired = false;
-      let icebergsIsRequired = false;
-      let method = 'privatePostAuthLimit';
-      let order = {
-          'pair': market['id'],
-          'qty': this.amountToPrecision (symbol, amount),
-          'side': side.toUpperCase ()
-      };
-      switch (uppercaseType) {
-        case 'LIMIT': {
-          order['price'] = price
-          priceIsRequired = true;
-          break;
+        await this.loadMarkets ();
+        let market = this.market (symbol);
+        let test = this.safeValue (params, 'test', false);
+        let stopPrice = this.safeFloat (params, 'stopPrice');
+        let icebergs = this.safeFloat (params, 'icebergs');
+        let uppercaseType = type.toUpperCase ();
+        let priceIsRequired = false;
+        let triggerPriceIsRequired = false;
+        let icebergsIsRequired = false;
+        let method = 'privatePostAuthLimit';
+        let order = {
+            'pair': market['id'],
+            'qty': this.amountToPrecision (symbol, amount),
+            'side': side.toUpperCase (),
+        };
+        if (test !== undefined) {
+            order['is_test'] = test;
         }
-        case 'MARKET': {
-          method = 'privatePostAuthMarket'
-          break;
+        if (uppercaseType === 'LIMIT') {
+            order['price'] = price;
+            priceIsRequired = true;
+        } else if (uppercaseType === 'MARKET') {
+            method = 'privatePostAuthMarket';
+        } else if (uppercaseType === 'STOP_LOSS') {
+            order['trigger_price'] = stopPrice;
+            method = 'privatePostAuthMarketTrigger';
+            triggerPriceIsRequired = true;
+        } else if (uppercaseType === 'STOP_LOSS_LIMIT') {
+            order['trigger_price'] = stopPrice;
+            order['price'] = price;
+            method = 'privatePostAuthLimitTrigger';
+            triggerPriceIsRequired = true;
+            priceIsRequired = true;
+        } else if (uppercaseType === 'TAKE_PROFIT') {
+            order['trigger_price'] = stopPrice;
+            method = 'privatePostAuthMarketTrigger';
+            triggerPriceIsRequired = true;
+        } else if (uppercaseType === 'TAKE_PROFIT_LIMIT') {
+            order['trigger_price'] = stopPrice;
+            order['price'] = price;
+            method = 'privatePostAuthLimitTrigger';
+            triggerPriceIsRequired = true;
+            priceIsRequired = true;
+        } else if (uppercaseType === 'TRIGGER') {
+            order['trigger_price'] = stopPrice;
+            order['price'] = price;
+            method = 'privatePostAuthStop';
+            triggerPriceIsRequired = true;
+            priceIsRequired = true;
+        } else if (uppercaseType === 'ICEBERG') {
+            order['icebergs'] = icebergs;
+            order['price'] = price;
+            method = 'privatePostAuthIceberg';
+            priceIsRequired = true;
+            icebergsIsRequired = true;
         }
-        case 'STOP_LOSS': {
-          order['trigger_price'] = stopPrice
-          method = 'privatePostAuthMarketTrigger'
-          triggerPriceIsRequired = true;
-          break;
+        if (priceIsRequired && price === undefined) {
+            throw new InvalidOrder ('createOrder method requires a price argument for a ' + type + ' order');
         }
-        case 'STOP_LOSS_LIMIT': {
-          order['trigger_price'] = stopPrice
-          order['price'] = price
-          method = 'privatePostAuthLimitTrigger'
-          triggerPriceIsRequired = true;
-          priceIsRequired = true;
-          break;
+        if (triggerPriceIsRequired && stopPrice === undefined) {
+            throw new InvalidOrder ('createOrder method requires a trigger_price as an extra param for a ' + type + ' order');
         }
-        case 'TAKE_PROFIT': {
-          order['trigger_price'] = stopPrice
-          method = 'privatePostAuthMarketTrigger'
-          triggerPriceIsRequired = true;
-          break;
+        if (icebergsIsRequired && icebergs === undefined) {
+            throw new InvalidOrder ('createOrder method requires a icebergs as an extra param for a ' + type + ' order');
         }
-        case 'TAKE_PROFIT_LIMIT': {
-          order['trigger_price'] = stopPrice
-          order['price'] = price
-          method = 'privatePostAuthLimitTrigger'
-          triggerPriceIsRequired = true;
-          priceIsRequired = true;
-          break;
-        }
-        case 'TRIGGER': {
-          order['trigger_price'] = stopPrice
-          order['price'] = price
-          method = 'privatePostAuthStop'
-          triggerPriceIsRequired = true;
-          priceIsRequired = true;
-          break;
-        }
-        case 'ICEBERG': {
-          order['icebergs'] = icebergs
-          order['price'] = price
-          method = 'privatePostAuthIceberg'
-          priceIsRequired = true;
-          icebergsIsRequired = true;
-          break;
-        }
-      }
-      if (priceIsRequired && price === undefined) throw new InvalidOrder (this.id + ' createOrder method requires a price argument for a ' + type + ' order');
-      if (triggerPriceIsRequired && stopPrice === undefined) throw new InvalidOrder (this.id + ' createOrder method requires a trigger_price as an extra param for a ' + type + ' order');
-      if (icebergsIsRequired && icebergs === undefined) throw new InvalidOrder (this.id + ' createOrder method requires a icebergs as an extra param for a ' + type + ' order');
-      let response = await this[method] (this.extend (order, params));
-      return this.parseOrder (response['result'], market);
+        let response = await this[method] (this.extend (order, params));
+        return this.parseOrder (response['result'], market);
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
@@ -552,35 +556,34 @@ module.exports = class bishino extends Exchange {
     }
 
     parseTransaction (transaction, currency = undefined) {
-      let id = this.safeString (transaction, 'id');
-      let address = this.safeString (transaction, 'address');
-      let tx = this.safeValue (transaction, 'transaction');
-      let txHash = this.safeString(tx, 'hash');
-      let timestamp = this.safeInteger (transaction, 'time');;
-      let hash = this.safeString (transaction, 'hash');
-      let currencyId = this.safeString (transaction, 'asset');
-      let type = id.indexOf(currencyId) !== -1 ? 'deposit' : 'withdrawal';
-      let status = this.parseStatus (this.safeString (transaction, 'status'));
-      let amount = this.safeFloat (transaction, 'net');
-      let gross = this.safeFloat(transaction, 'qty');
-      let code = this.commonCurrencyCode (currencyId);
-      let fee = {
-          'cost': gross - amount,
-          'currency': code,
-      };
-      return {
-          'info': transaction,
-          'id': id,
-          'txid': txHash,
-          'timestamp': timestamp,
-          'datetime': this.iso8601 (timestamp),
-          'address': address,
-          'type': type,
-          'amount': amount,
-          'currency': code,
-          'status': status,
-          'fee': fee,
-      };
+        let id = this.safeString (transaction, 'id');
+        let address = this.safeString (transaction, 'address');
+        let tx = this.safeValue (transaction, 'transaction');
+        let txHash = this.safeString (tx, 'hash');
+        let timestamp = this.safeInteger (transaction, 'time');
+        let currencyId = this.safeString (transaction, 'asset');
+        let type = id.indexOf (currencyId) !== -1 ? 'deposit' : 'withdrawal';
+        let status = this.parseStatus (this.safeString (transaction, 'status'));
+        let amount = this.safeFloat (transaction, 'net');
+        let gross = this.safeFloat (transaction, 'qty');
+        let code = this.commonCurrencyCode (currencyId);
+        let fee = {
+            'cost': gross - amount,
+            'currency': code,
+        };
+        return {
+            'info': transaction,
+            'id': id,
+            'txid': txHash,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'address': address,
+            'type': type,
+            'amount': amount,
+            'currency': code,
+            'status': status,
+            'fee': fee,
+        };
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
@@ -589,18 +592,18 @@ module.exports = class bishino extends Exchange {
             url += '?' + this.urlencode (params);
         headers = { 'Content-Type': 'application/json' };
         if (api === 'private') {
-          this.checkRequiredCredentials ();
-          let query = this.urlencode (this.extend ({
-              'timestamp': this.nonce (),
-              'recv_window': this.options['recvWindow'],
-          }, params));
-          let signature = this.hmac (query, this.secret, 'sha256', 'base64');
-          headers = {
-              'x-api-key': this.apiKey,
-              'x-signature': signature,
-          };
-          body = this.encode (query);
-          headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            this.checkRequiredCredentials ();
+            let query = this.urlencode (this.extend ({
+                'timestamp': this.nonce (),
+                'recv_window': this.options['recvWindow'],
+            }, params));
+            let signature = this.hmac (query, this.secret, 'sha256', 'base64');
+            headers = {
+                'x-api-key': this.apiKey,
+                'x-signature': signature,
+            };
+            body = this.encode (query);
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
