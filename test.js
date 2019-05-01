@@ -11,6 +11,6 @@ const exchange = new bishino ({
 
 (async () => {
   var loaded = await exchange.load_markets();
-  var book = await exchange.fetch_order('3dd058b06b7911e98ffe4d225417685b');
+  var book = await exchange.withdraw('DASH', 0.1, 'ycUhfo88KyCakGfHWu94f1kSTW1QVtJyfU');
   console.log(book);
 })();

@@ -43,13 +43,21 @@ module.exports = class bishino extends Exchange {
                         'depth',
                         'ohlcv',
                         'trades',
+                        'assets',
                     ],
                 },
                 'private': {
                     'get': [
                       'offer_by_id',
+                      'offers_by_account',
+                      'active_offers_by_account',
+                      'completed_offers_by_account',
+                      'trades_by_account',
+                      'deposits',
+                      'withdrawals',
                     ],
                     'post': [
+                      'auth/withdraw',
                     ],
                 },
             },
@@ -100,14 +108,13 @@ module.exports = class bishino extends Exchange {
     async loadTimeDifference () {
         const response = await this.publicGetTime ();
         const after = this.milliseconds ();
-        this.options['timeDifference'] = parseInt (after - response['time']);
+        this.options['timeDifference'] = parseInt (after - response['result']);
         return this.options['timeDifference'];
     }
 
     async fetchMarkets (params = {}) {
         let response = await this.publicGetPairs (this.extend ({}, params));
-        if (this.options['adjustForTimeDifference'])
-            await this.loadTimeDifference ();
+        if (this.options['adjustForTimeDifference']) await this.loadTimeDifference ();
         let markets = response['result'];
         let result = [];
         let pairs = Object.keys(markets);
@@ -254,12 +261,17 @@ module.exports = class bishino extends Exchange {
         let amount = this.safeFloat (trade, 'qty');
         let id = this.safeString (trade, 'id');
         let symbol = this.safeString (trade, 'pair').replace('_','/');
+        let fee = {
+            'cost': this.safeFloat (trade, 'net_commission'),
+            'currency': this.commonCurrencyCode (trade['net_commission_asset']),
+        };
         return {
             'info': trade,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'symbol': symbol,
             'id': id,
+            'fee': fee,
             'price': price,
             'amount': amount,
             'cost': price * amount
@@ -274,7 +286,6 @@ module.exports = class bishino extends Exchange {
         };
         if (since !== undefined) {
             request['start'] = since;
-            request['end'] = this.sum (since, 86400000);
         }
         if (limit !== undefined) {
             request['limit'] = limit;
@@ -283,93 +294,38 @@ module.exports = class bishino extends Exchange {
         return this.parseTrades (response['result'], market['symbol'], since, limit);
     }
 
-    parseOrderStatus (status) {
+    parseStatus (status) {
         let statuses = {
             'ACTIVE': 'open',
             'COMPLETED': 'closed',
             'CANCELLED': 'canceled',
-            'REJECTED': 'rejected'
+            'REJECTED': 'rejected',
+            'PENDING': 'open',
         };
         return (status in statuses) ? statuses[status] : status;
     }
 
     parseOrder (order, market = undefined) {
-        let status = this.parseOrderStatus (this.safeString (order, 'status'));
-        let symbol = this.findSymbol (this.safeString (order, 'symbol'), market);
-        let timestamp = undefined;
-        if ('time' in order)
-            timestamp = order['time'];
-        else if ('transactTime' in order)
-            timestamp = order['transactTime'];
+        let status = this.parseStatus (this.safeString (order, 'status'));
+        let symbol = this.findSymbol (this.safeString (order, 'pair'), market);
+        let timestamp = order['time'];;
         let price = this.safeFloat (order, 'price');
-        let amount = this.safeFloat (order, 'origQty');
-        let filled = this.safeFloat (order, 'executedQty');
-        let remaining = undefined;
-        let cost = this.safeFloat (order, 'cummulativeQuoteQty');
-        if (filled !== undefined) {
-            if (amount !== undefined) {
-                remaining = amount - filled;
-                if (this.options['parseOrderToPrecision']) {
-                    remaining = parseFloat (this.amountToPrecision (symbol, remaining));
-                }
-                remaining = Math.max (remaining, 0.0);
-            }
-            if (price !== undefined) {
-                if (cost === undefined) {
-                    cost = price * filled;
-                }
-            }
-        }
-        let id = this.safeString (order, 'orderId');
-        let type = this.safeString (order, 'type');
-        if (type !== undefined) {
-            type = type.toLowerCase ();
-            if (type === 'market') {
-                if (price === 0.0) {
-                    if ((cost !== undefined) && (filled !== undefined)) {
-                        if ((cost > 0) && (filled > 0)) {
-                            price = cost / filled;
-                        }
-                    }
-                }
-            }
-        }
-        let side = this.safeString (order, 'side');
-        if (side !== undefined)
-            side = side.toLowerCase ();
-        let fee = undefined;
-        let trades = undefined;
-        const fills = this.safeValue (order, 'fills');
-        if (fills !== undefined) {
-            trades = this.parseTrades (fills, market);
-            let numTrades = trades.length;
-            if (numTrades > 0) {
-                cost = trades[0]['cost'];
-                fee = {
-                    'cost': trades[0]['fee']['cost'],
-                    'currency': trades[0]['fee']['currency'],
-                };
-                for (let i = 1; i < trades.length; i++) {
-                    cost = this.sum (cost, trades[i]['cost']);
-                    fee['cost'] = this.sum (fee['cost'], trades[i]['fee']['cost']);
-                }
-            }
-        }
-        let average = undefined;
-        if (cost !== undefined) {
-            if (filled) {
-                average = cost / filled;
-            }
-            if (this.options['parseOrderToPrecision']) {
-                cost = parseFloat (this.costToPrecision (symbol, cost));
-            }
-        }
+        let amount = this.safeFloat (order, 'qty_orig');
+        let remaining = this.safeFloat (order, 'qty_remaining');
+        let filled = amount - remaining;
+        let cost = price * amount;
+        let id = this.safeString (order, 'id');
+        let type = this.safeString (order, 'type').toLowerCase();
+        let side = this.safeString (order, 'side').toLowerCase();
+        let fills = this.safeValue (order, 'fills');
+        let trades = this.parseTrades (fills || [], market);
+        let average = trades && trades.length > 0 ? trades.map(e => e.price).reduce((a,b) => a+b, 0) / trades.length : price;
+        price = average;
         let result = {
             'info': order,
             'id': id,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'lastTradeTimestamp': undefined,
             'symbol': symbol,
             'type': type,
             'side': side,
@@ -380,8 +336,7 @@ module.exports = class bishino extends Exchange {
             'filled': filled,
             'remaining': remaining,
             'status': status,
-            'fee': fee,
-            'trades': trades,
+            'trades': trades
         };
         return result;
     }
@@ -392,26 +347,163 @@ module.exports = class bishino extends Exchange {
             'id': id
         };
         let response = await this.privateGetOfferById (this.extend (request, params));
-        return this.parseOrder (response);
+        return this.parseOrder (response['result']);
+    }
+
+    async fetchOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = this.market (symbol);
+        let request = {};
+        if (since !== undefined) {
+            request['start'] = since;
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        let response = await this.privateGetOffersByAccount (this.extend (request, params));
+        return this.parseOrders (response['result'], market, since, limit);
+    }
+
+    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = this.market (symbol);
+        let request = {};
+        if (since !== undefined) {
+            request['start'] = since;
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        let response = await this.privateGetActiveOffersByAccount (this.extend (request, params));
+        return this.parseOrders (response['result'], market, since, limit);
+    }
+
+    async fetchClosedOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = this.market (symbol);
+        let request = {};
+        if (since !== undefined) {
+            request['start'] = since;
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        let response = await this.privateGetCompletedOffersByAccount (this.extend (request, params));
+        return this.parseOrders (response['result'], market, since, limit);
+    }
+
+    async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = this.market (symbol);
+        let request = {};
+        if (limit !== undefined)
+            request['limit'] = limit;
+        if (since !== undefined)
+            request['start'] = since;
+        let response = await this.privateGetTradesByAccount (this.extend (request, params));
+        return this.parseTrades (response['result'], market, since, limit);
+    }
+
+    async fetchDeposits (code = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const request = {};
+        let response = await this.privateGetDeposits(this.extend (request, params));
+        return this.parseTransactions (response['result'], undefined, since, limit);
+    }
+
+    async fetchWithdrawals (code = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const request = {};
+        let response = await this.privateGetWithdrawals(this.extend (request, params));
+        return this.parseTransactions (response['result'], undefined, since, limit);
+    }
+
+    async fetchFundingFees (codes = undefined, params = {}) {
+        let response = await this.publicGetAssets ();
+        let detail = this.safeValue (response, 'result');
+        let ids = Object.keys (detail);
+        let depositFees = {};
+        let withdrawFees = {};
+        for (let i = 0; i < ids.length; i++) {
+            let id = ids[i];
+            let code = this.commonCurrencyCode (id);
+            let asset = this.safeValue(detail, id);
+            let fees = this.safeValue(asset, 'fees');
+            withdrawFees[code] = this.safeFloat (fees, 'withdrawal');
+            depositFees[code] = this.safeFloat (fees, 'deposit');
+        }
+        return {
+            'withdraw': withdrawFees,
+            'deposit': depositFees,
+            'info': detail,
+        };
+    }
+
+    async withdraw (code, amount, address, tag = undefined, params = {}) {
+        this.checkAddress (address);
+        await this.loadMarkets ();
+        let request = {
+            'asset': code,
+            'address': address,
+            'qty': parseFloat (amount)
+        };
+        let response = await this.privatePostAuthWithdraw (this.extend (request, params));
+        return {
+            'info': response['result'],
+            'id': this.safeString (response['result'], 'id'),
+        };
+    }
+
+    parseTransaction (transaction, currency = undefined) {
+      let id = this.safeString (transaction, 'id');
+      let address = this.safeString (transaction, 'address');
+      let tx = this.safeValue (transaction, 'transaction');
+      let txHash = this.safeString(tx, 'hash');
+      let timestamp = this.safeInteger (transaction, 'time');;
+      let hash = this.safeString (transaction, 'hash');
+      let currencyId = this.safeString (transaction, 'asset');
+      let type = id.indexOf(currencyId) !== -1 ? 'deposit' : 'withdrawal';
+      let status = this.parseStatus (this.safeString (transaction, 'status'));
+      let amount = this.safeFloat (transaction, 'net');
+      let gross = this.safeFloat(transaction, 'qty');
+      let code = this.commonCurrencyCode (currencyId);
+      let fee = {
+          'cost': gross - amount,
+          'currency': code,
+      };
+      return {
+          'info': transaction,
+          'id': id,
+          'txid': txHash,
+          'timestamp': timestamp,
+          'datetime': this.iso8601 (timestamp),
+          'address': address,
+          'type': type,
+          'amount': amount,
+          'currency': code,
+          'status': status,
+          'fee': fee,
+      };
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api'] + '/' + path;
-        if (Object.keys (params).length)
+        if (method === 'GET' && Object.keys (params).length)
             url += '?' + this.urlencode (params);
         headers = { 'Content-Type': 'application/json' };
         if (api === 'private') {
           this.checkRequiredCredentials ();
           let query = this.urlencode (this.extend ({
               'timestamp': this.nonce (),
-              'recvWindow': this.options['recvWindow'],
+              'recv_window': this.options['recvWindow'],
           }, params));
-          let signature = this.hmac (this.encode (query), this.encode (this.secret));
+          let signature = this.hmac (this.encode (query), this.secret);
           headers = {
               'x-api-key': this.apiKey,
               'x-signature': signature,
           };
-          body = query;
+          body = this.encode (query);
+          console.log(body, signature)
           headers['Content-Type'] = 'application/x-www-form-urlencoded';
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
