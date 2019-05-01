@@ -3,7 +3,7 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { AuthenticationError, DDoSProtection, ExchangeNotAvailable, InvalidOrder, OrderNotFound, PermissionDenied, InsufficientFunds } = require ('./base/errors');
+const { ArgumentsRequired, AuthenticationError, DDoSProtection, ExchangeNotAvailable, InvalidOrder, OrderNotFound, PermissionDenied, InsufficientFunds } = require ('./base/errors');
 
 //  ---------------------------------------------------------------------------
 
@@ -17,8 +17,8 @@ module.exports = class bishino extends Exchange {
             'has': {
                 'CORS': false,
                 'publicAPI': true,
-                'fetchBidsAsks': true,
                 'fetchTickers': true,
+                'fetchOHLCV': true,
             },
             'timeframes': {
                 '5m': '5min',
@@ -41,9 +41,14 @@ module.exports = class bishino extends Exchange {
                         'pairs',
                         'ticker',
                         'depth',
+                        'ohlcv',
+                        'trades',
                     ],
                 },
                 'private': {
+                    'get': [
+                      'offer_by_id',
+                    ],
                     'post': [
                     ],
                 },
@@ -206,20 +211,194 @@ module.exports = class bishino extends Exchange {
     async fetchOrderBook (symbol, limit = undefined, params = {}) {
         await this.loadMarkets ();
         let market = this.market (symbol);
-        console.log(market);
         let request = {
             'pair': market['id'].replace('/','_'),
         };
         if (limit !== undefined)
             request['limit'] = limit;
         let response = await this.publicGetDepth (this.extend (request, params));
-        console.log(response);
-        let orderbook = this.parseOrderBook (response);
+        let orderbook = this.parseOrderBook (response['result'], undefined, 'bids', 'asks', 'price', 'qty');
         return orderbook;
+    }
+
+    parseOHLCV (ohlcv, market = undefined, timeframe = '1m', since = undefined, limit = undefined) {
+        return [
+            ohlcv.open_time,
+            parseFloat (ohlcv.open),
+            parseFloat (ohlcv.high),
+            parseFloat (ohlcv.low),
+            parseFloat (ohlcv.close),
+            parseFloat (ohlcv.base_volume),
+        ];
+    }
+
+    async fetchOHLCV (symbol, timeframe = '5m', since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'pair': market['id']
+        };
+        if (since !== undefined) {
+            request['start'] = since;
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        const response = await this.publicGetOhlcv (this.extend (request, params));
+        return this.parseOHLCVs (response['result'], market, timeframe, since, limit);
+    }
+
+    parseTrade (trade, market = undefined) {
+        let timestamp = this.safeInteger (trade,'time');
+        let price = this.safeFloat (trade,'price');
+        let amount = this.safeFloat (trade, 'qty');
+        let id = this.safeString (trade, 'id');
+        let symbol = this.safeString (trade, 'pair').replace('_','/');
+        return {
+            'info': trade,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'symbol': symbol,
+            'id': id,
+            'price': price,
+            'amount': amount,
+            'cost': price * amount
+        };
+    }
+
+    async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let market = this.market (symbol);
+        let request = {
+            'pair': market['id'],
+        };
+        if (since !== undefined) {
+            request['start'] = since;
+            request['end'] = this.sum (since, 86400000);
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        let response = await this.publicGetTrades (this.extend (request, params));
+        return this.parseTrades (response['result'], market['symbol'], since, limit);
+    }
+
+    parseOrderStatus (status) {
+        let statuses = {
+            'ACTIVE': 'open',
+            'COMPLETED': 'closed',
+            'CANCELLED': 'canceled',
+            'REJECTED': 'rejected'
+        };
+        return (status in statuses) ? statuses[status] : status;
+    }
+
+    parseOrder (order, market = undefined) {
+        let status = this.parseOrderStatus (this.safeString (order, 'status'));
+        let symbol = this.findSymbol (this.safeString (order, 'symbol'), market);
+        let timestamp = undefined;
+        if ('time' in order)
+            timestamp = order['time'];
+        else if ('transactTime' in order)
+            timestamp = order['transactTime'];
+        let price = this.safeFloat (order, 'price');
+        let amount = this.safeFloat (order, 'origQty');
+        let filled = this.safeFloat (order, 'executedQty');
+        let remaining = undefined;
+        let cost = this.safeFloat (order, 'cummulativeQuoteQty');
+        if (filled !== undefined) {
+            if (amount !== undefined) {
+                remaining = amount - filled;
+                if (this.options['parseOrderToPrecision']) {
+                    remaining = parseFloat (this.amountToPrecision (symbol, remaining));
+                }
+                remaining = Math.max (remaining, 0.0);
+            }
+            if (price !== undefined) {
+                if (cost === undefined) {
+                    cost = price * filled;
+                }
+            }
+        }
+        let id = this.safeString (order, 'orderId');
+        let type = this.safeString (order, 'type');
+        if (type !== undefined) {
+            type = type.toLowerCase ();
+            if (type === 'market') {
+                if (price === 0.0) {
+                    if ((cost !== undefined) && (filled !== undefined)) {
+                        if ((cost > 0) && (filled > 0)) {
+                            price = cost / filled;
+                        }
+                    }
+                }
+            }
+        }
+        let side = this.safeString (order, 'side');
+        if (side !== undefined)
+            side = side.toLowerCase ();
+        let fee = undefined;
+        let trades = undefined;
+        const fills = this.safeValue (order, 'fills');
+        if (fills !== undefined) {
+            trades = this.parseTrades (fills, market);
+            let numTrades = trades.length;
+            if (numTrades > 0) {
+                cost = trades[0]['cost'];
+                fee = {
+                    'cost': trades[0]['fee']['cost'],
+                    'currency': trades[0]['fee']['currency'],
+                };
+                for (let i = 1; i < trades.length; i++) {
+                    cost = this.sum (cost, trades[i]['cost']);
+                    fee['cost'] = this.sum (fee['cost'], trades[i]['fee']['cost']);
+                }
+            }
+        }
+        let average = undefined;
+        if (cost !== undefined) {
+            if (filled) {
+                average = cost / filled;
+            }
+            if (this.options['parseOrderToPrecision']) {
+                cost = parseFloat (this.costToPrecision (symbol, cost));
+            }
+        }
+        let result = {
+            'info': order,
+            'id': id,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'lastTradeTimestamp': undefined,
+            'symbol': symbol,
+            'type': type,
+            'side': side,
+            'price': price,
+            'amount': amount,
+            'cost': cost,
+            'average': average,
+            'filled': filled,
+            'remaining': remaining,
+            'status': status,
+            'fee': fee,
+            'trades': trades,
+        };
+        return result;
+    }
+
+    async fetchOrder (id, symbol = undefined, params = {}) {
+        await this.loadMarkets ();
+        let request = {
+            'id': id
+        };
+        let response = await this.privateGetOfferById (this.extend (request, params));
+        return this.parseOrder (response);
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api'] + '/' + path;
+        if (Object.keys (params).length)
+            url += '?' + this.urlencode (params);
         headers = { 'Content-Type': 'application/json' };
         if (api === 'private') {
           this.checkRequiredCredentials ();
