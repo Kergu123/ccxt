@@ -3,7 +3,7 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { ArgumentsRequired, AuthenticationError, DDoSProtection, ExchangeNotAvailable, InvalidOrder, OrderNotFound, PermissionDenied, InsufficientFunds } = require ('./base/errors');
+const { ArgumentsRequired, AuthenticationError, DDoSProtection, ExchangeError, InvalidOrder, OrderNotFound, PermissionDenied, InsufficientFunds } = require ('./base/errors');
 
 //  ---------------------------------------------------------------------------
 
@@ -13,12 +13,27 @@ module.exports = class bishino extends Exchange {
             'id': 'bishino',
             'name': 'Bishino',
             'countries': [ 'SC' ],
+            'rateLimit': 500,
             'version': 'v1',
             'has': {
-                'CORS': false,
-                'publicAPI': true,
-                'fetchTickers': true,
-                'fetchOHLCV': true,
+              'fetchDepositAddress': true,
+              'CORS': false,
+              'cancelOrder': true,
+              'createOrder': true,
+              'fetchBidsAsks': true,
+              'fetchTickers': true,
+              'fetchOHLCV': true,
+              'fetchTrades': true,
+              'fetchMyTrades': true,
+              'fetchOrder': true,
+              'fetchOrders': true,
+              'fetchOpenOrders': true,
+              'fetchClosedOrders': true,
+              'withdraw': true,
+              'fetchFundingFees': true,
+              'fetchDeposits': true,
+              'fetchWithdrawals': true,
+              'fetchTransactions': false,
             },
             'timeframes': {
                 '5m': '5min',
@@ -31,7 +46,6 @@ module.exports = class bishino extends Exchange {
                     'https://docs.bishino.com',
                 ],
                 'fees': 'https://bishinosupport.zendesk.com/hc/en-us/articles/360004987079-Fee-structure',
-                'referral': 'https://www.bibox.com/signPage?id=11114745&lang=en',
             },
             'api': {
                 'public': {
@@ -58,13 +72,15 @@ module.exports = class bishino extends Exchange {
                     ],
                     'post': [
                       'auth/withdraw',
+                      'auth/limit',
+                      'auth/market',
+                      'auth/limit_trigger',
+                      'auth/market_trigger',
+                      'auth/stop',
+                      'auth/icebergs',
+                      'auth/cancel',
                     ],
                 },
-            },
-            'options': {
-              'recvWindow': 5 * 1000,
-              'timeDifference': 0,
-              'adjustForTimeDifference': false
             },
             'fees': {
                 'trading': {
@@ -80,24 +96,16 @@ module.exports = class bishino extends Exchange {
                     'deposit': {},
                 },
             },
+            'options': {
+              'recvWindow': 5 * 1000,
+              'timeDifference': 0,
+              'adjustForTimeDifference': false
+            },
             'exceptions': {
-                '2021': InsufficientFunds, // Insufficient balance available for withdrawal
-                '2015': AuthenticationError, // Google authenticator is wrong
-                '2027': InsufficientFunds, // Insufficient balance available (for trade)
-                '2033': OrderNotFound, // operation failed! Orders have been completed or revoked
-                '2067': InvalidOrder, // Does not support market orders
-                '2068': InvalidOrder, // The number of orders can not be less than
-                '2085': InvalidOrder, // Order quantity is too small
-                '3012': AuthenticationError, // invalid apiKey
-                '3024': PermissionDenied, // wrong apikey permissions
-                '3025': AuthenticationError, // signature failed
-                '4000': ExchangeNotAvailable, // current network is unstable
-                '4003': DDoSProtection, // server busy please try again later
+                '401': ExchangeError,
+                '500': ExchangeError,
             },
-            'commonCurrencies': {
-                'KEY': 'Bihu',
-                'PAI': 'PCHAIN',
-            },
+            'commonCurrencies': {},
         });
     }
 
@@ -366,7 +374,10 @@ module.exports = class bishino extends Exchange {
 
     async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        let market = this.market (symbol);
+        let market = undefined;
+        if (symbol !== undefined) {
+          market = this.market (symbol);
+        }
         let request = {};
         if (since !== undefined) {
             request['start'] = since;
@@ -454,6 +465,92 @@ module.exports = class bishino extends Exchange {
         };
     }
 
+    async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
+      await this.loadMarkets ();
+      let market = this.market (symbol);
+      let test = this.safeValue (params, 'test', false);
+      let stopPrice = this.safeFloat (params, 'stopPrice');
+      let icebergs = this.safeFloat (params, 'icebergs');
+      let uppercaseType = type.toUpperCase ();
+      let priceIsRequired = false;
+      let triggerPriceIsRequired = false;
+      let icebergsIsRequired = false;
+      let method = 'privatePostAuthLimit';
+      let order = {
+          'pair': market['id'],
+          'qty': this.amountToPrecision (symbol, amount),
+          'side': side.toUpperCase ()
+      };
+      switch (uppercaseType) {
+        case 'LIMIT': {
+          order['price'] = price
+          priceIsRequired = true;
+          break;
+        }
+        case 'MARKET': {
+          method = 'privatePostAuthMarket'
+          break;
+        }
+        case 'STOP_LOSS': {
+          order['trigger_price'] = stopPrice
+          method = 'privatePostAuthMarketTrigger'
+          triggerPriceIsRequired = true;
+          break;
+        }
+        case 'STOP_LOSS_LIMIT': {
+          order['trigger_price'] = stopPrice
+          order['price'] = price
+          method = 'privatePostAuthLimitTrigger'
+          triggerPriceIsRequired = true;
+          priceIsRequired = true;
+          break;
+        }
+        case 'TAKE_PROFIT': {
+          order['trigger_price'] = stopPrice
+          method = 'privatePostAuthMarketTrigger'
+          triggerPriceIsRequired = true;
+          break;
+        }
+        case 'TAKE_PROFIT_LIMIT': {
+          order['trigger_price'] = stopPrice
+          order['price'] = price
+          method = 'privatePostAuthLimitTrigger'
+          triggerPriceIsRequired = true;
+          priceIsRequired = true;
+          break;
+        }
+        case 'TRIGGER': {
+          order['trigger_price'] = stopPrice
+          order['price'] = price
+          method = 'privatePostAuthStop'
+          triggerPriceIsRequired = true;
+          priceIsRequired = true;
+          break;
+        }
+        case 'ICEBERG': {
+          order['icebergs'] = icebergs
+          order['price'] = price
+          method = 'privatePostAuthIceberg'
+          priceIsRequired = true;
+          icebergsIsRequired = true;
+          break;
+        }
+      }
+      if (priceIsRequired && price === undefined) throw new InvalidOrder (this.id + ' createOrder method requires a price argument for a ' + type + ' order');
+      if (triggerPriceIsRequired && stopPrice === undefined) throw new InvalidOrder (this.id + ' createOrder method requires a trigger_price as an extra param for a ' + type + ' order');
+      if (icebergsIsRequired && icebergs === undefined) throw new InvalidOrder (this.id + ' createOrder method requires a icebergs as an extra param for a ' + type + ' order');
+      let response = await this[method] (this.extend (order, params));
+      return this.parseOrder (response['result'], market);
+    }
+
+    async cancelOrder (id, symbol = undefined, params = {}) {
+        await this.loadMarkets ();
+        let response = await this.privatePostAuthCancel (this.extend ({
+            'id': id,
+        }, params));
+        return this.parseOrder (response['result']);
+    }
+
     parseTransaction (transaction, currency = undefined) {
       let id = this.safeString (transaction, 'id');
       let address = this.safeString (transaction, 'address');
@@ -497,13 +594,12 @@ module.exports = class bishino extends Exchange {
               'timestamp': this.nonce (),
               'recv_window': this.options['recvWindow'],
           }, params));
-          let signature = this.hmac (this.encode (query), this.secret);
+          let signature = this.hmac (query, this.secret, 'sha256', 'base64');
           headers = {
               'x-api-key': this.apiKey,
               'x-signature': signature,
           };
           body = this.encode (query);
-          console.log(body, signature)
           headers['Content-Type'] = 'application/x-www-form-urlencoded';
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };

@@ -11,6 +11,12 @@ const exchange = new bishino ({
 
 (async () => {
   var loaded = await exchange.load_markets();
-  var book = await exchange.withdraw('DASH', 0.1, 'ycUhfo88KyCakGfHWu94f1kSTW1QVtJyfU');
-  console.log(book);
+  //console.log(exchange.markets)
+  var book = await exchange.fetch_open_orders();
+  //console.log(book[book.length-1]);
+  //var cancelled = await exchange.cancel_order('dfcbb0906c5c11e98cba87a2f88553f8');
+  //console.log(cancelled);
+  var order_placed = await exchange.createOrder('LOOM/ETH', 'limit', 'sell', 0.1, 0.95);
+  console.log(order_placed);
+  //var placed = await exchange.withdraw('DASH', 0.1, 'ycUhfo88KyCakGfHWu94f1kSTW1QVtJyfU');
 })();
