@@ -29,6 +29,7 @@ class bishino extends Exchange {
                 'fetchOrder' => true,
                 'fetchOrders' => true,
                 'fetchOpenOrders' => true,
+                'fetchBalance' => true,
                 'fetchClosedOrders' => true,
                 'withdraw' => true,
                 'fetchFundingFees' => true,
@@ -70,6 +71,7 @@ class bishino extends Exchange {
                         'trades_by_account',
                         'deposits',
                         'withdrawals',
+                        'account_info',
                     ),
                     'post' => array (
                         'auth/withdraw',
@@ -291,6 +293,27 @@ class bishino extends Exchange {
             'amount' => $amount,
             'cost' => $price * $amount,
         );
+    }
+
+    public function fetch_balance ($params = array ()) {
+        $this->load_markets();
+        $response = $this->privateGetAccountInfo ($params);
+        $result = array ( 'info' => $response['result'] );
+        $balances = $response['result']['balances'];
+        for ($i = 0; $i < count ($balances); $i++) {
+            $balance = $balances[$i];
+            $currency = $balance['asset'];
+            if (is_array ($this->currencies_by_id) && array_key_exists ($currency, $this->currencies_by_id))
+                $currency = $this->currencies_by_id[$currency]['code'];
+            $account = array (
+                'free' => floatval ($balance['free']),
+                'used' => floatval ($balance['locked']),
+                'total' => 0.0,
+            );
+            $account['total'] = $this->sum ($account['free'], $account['used']);
+            $result[$currency] = $account;
+        }
+        return $this->parse_balance($result);
     }
 
     public function fetch_trades ($symbol, $since = null, $limit = null, $params = array ()) {

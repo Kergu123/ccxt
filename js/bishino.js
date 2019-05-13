@@ -29,6 +29,7 @@ module.exports = class bishino extends Exchange {
                 'fetchOrder': true,
                 'fetchOrders': true,
                 'fetchOpenOrders': true,
+                'fetchBalance': true,
                 'fetchClosedOrders': true,
                 'withdraw': true,
                 'fetchFundingFees': true,
@@ -70,6 +71,7 @@ module.exports = class bishino extends Exchange {
                         'trades_by_account',
                         'deposits',
                         'withdrawals',
+                        'account_info',
                     ],
                     'post': [
                         'auth/withdraw',
@@ -291,6 +293,27 @@ module.exports = class bishino extends Exchange {
             'amount': amount,
             'cost': price * amount,
         };
+    }
+
+    async fetchBalance (params = {}) {
+        await this.loadMarkets ();
+        let response = await this.privateGetAccountInfo (params);
+        let result = { 'info': response['result'] };
+        let balances = response['result']['balances'];
+        for (let i = 0; i < balances.length; i++) {
+            let balance = balances[i];
+            let currency = balance['asset'];
+            if (currency in this.currencies_by_id)
+                currency = this.currencies_by_id[currency]['code'];
+            let account = {
+                'free': parseFloat (balance['free']),
+                'used': parseFloat (balance['locked']),
+                'total': 0.0,
+            };
+            account['total'] = this.sum (account['free'], account['used']);
+            result[currency] = account;
+        }
+        return this.parseBalance (result);
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {

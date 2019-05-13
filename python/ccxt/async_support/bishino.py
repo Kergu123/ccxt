@@ -33,6 +33,7 @@ class bishino (Exchange):
                 'fetchOrder': True,
                 'fetchOrders': True,
                 'fetchOpenOrders': True,
+                'fetchBalance': True,
                 'fetchClosedOrders': True,
                 'withdraw': True,
                 'fetchFundingFees': True,
@@ -74,6 +75,7 @@ class bishino (Exchange):
                         'trades_by_account',
                         'deposits',
                         'withdrawals',
+                        'account_info',
                     ],
                     'post': [
                         'auth/withdraw',
@@ -280,6 +282,25 @@ class bishino (Exchange):
             'amount': amount,
             'cost': price * amount,
         }
+
+    async def fetch_balance(self, params={}):
+        await self.load_markets()
+        response = await self.privateGetAccountInfo(params)
+        result = {'info': response['result']}
+        balances = response['result']['balances']
+        for i in range(0, len(balances)):
+            balance = balances[i]
+            currency = balance['asset']
+            if currency in self.currencies_by_id:
+                currency = self.currencies_by_id[currency]['code']
+            account = {
+                'free': float(balance['free']),
+                'used': float(balance['locked']),
+                'total': 0.0,
+            }
+            account['total'] = self.sum(account['free'], account['used'])
+            result[currency] = account
+        return self.parse_balance(result)
 
     async def fetch_trades(self, symbol, since=None, limit=None, params={}):
         await self.load_markets()
