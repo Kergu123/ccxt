@@ -277,6 +277,7 @@ class bishino extends Exchange {
         $price = $this->safe_float($trade, 'price');
         $amount = $this->safe_float($trade, 'qty');
         $id = $this->safe_string($trade, 'id');
+        $side = $this->safe_string($trade, 'side');
         $symbol = str_replace ('_', '/', $this->safe_string($trade, 'pair'));
         $fee = array (
             'cost' => $this->safe_float($trade, 'net_commission'),
@@ -289,6 +290,7 @@ class bishino extends Exchange {
             'symbol' => $symbol,
             'id' => $id,
             'fee' => $fee,
+            'side' => strtolower ($side),
             'price' => $price,
             'amount' => $amount,
             'cost' => $price * $amount,

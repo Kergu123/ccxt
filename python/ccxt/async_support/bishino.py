@@ -266,6 +266,7 @@ class bishino (Exchange):
         price = self.safe_float(trade, 'price')
         amount = self.safe_float(trade, 'qty')
         id = self.safe_string(trade, 'id')
+        side = self.safe_string(trade, 'side')
         symbol = self.safe_string(trade, 'pair').replace('_', '/')
         fee = {
             'cost': self.safe_float(trade, 'net_commission'),
@@ -278,6 +279,7 @@ class bishino (Exchange):
             'symbol': symbol,
             'id': id,
             'fee': fee,
+            'side': side.lower(),
             'price': price,
             'amount': amount,
             'cost': price * amount,

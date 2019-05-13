@@ -277,6 +277,7 @@ module.exports = class bishino extends Exchange {
         let price = this.safeFloat (trade, 'price');
         let amount = this.safeFloat (trade, 'qty');
         let id = this.safeString (trade, 'id');
+        let side = this.safeString (trade, 'side');
         let symbol = this.safeString (trade, 'pair').replace ('_', '/');
         let fee = {
             'cost': this.safeFloat (trade, 'net_commission'),
@@ -289,6 +290,7 @@ module.exports = class bishino extends Exchange {
             'symbol': symbol,
             'id': id,
             'fee': fee,
+            'side': side.toLowerCase (),
             'price': price,
             'amount': amount,
             'cost': price * amount,
