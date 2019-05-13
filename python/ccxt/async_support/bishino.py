@@ -326,7 +326,7 @@ class bishino (Exchange):
 
     def parse_order(self, order, market=None):
         status = self.parse_status(self.safe_string(order, 'status'))
-        symbol = self.find_symbol(self.safe_string(order, 'pair'), market)
+        symbol = self.safe_string(order, 'pair').replace('_', '/')
         timestamp = order['time']
         price = self.safe_float(order, 'price')
         amount = self.safe_float(order, 'qty_orig')

@@ -344,7 +344,7 @@ class bishino extends Exchange {
 
     public function parse_order ($order, $market = null) {
         $status = $this->parse_status ($this->safe_string($order, 'status'));
-        $symbol = $this->find_symbol($this->safe_string($order, 'pair'), $market);
+        $symbol = str_replace ('_', '/', $this->safe_string($order, 'pair'));
         $timestamp = $order['time'];
         $price = $this->safe_float($order, 'price');
         $amount = $this->safe_float($order, 'qty_orig');

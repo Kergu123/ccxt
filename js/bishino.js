@@ -344,7 +344,7 @@ module.exports = class bishino extends Exchange {
 
     parseOrder (order, market = undefined) {
         let status = this.parseStatus (this.safeString (order, 'status'));
-        let symbol = this.findSymbol (this.safeString (order, 'pair'), market);
+        let symbol = this.safeString (order, 'pair').replace ('_', '/');
         let timestamp = order['time'];
         let price = this.safeFloat (order, 'price');
         let amount = this.safeFloat (order, 'qty_orig');
