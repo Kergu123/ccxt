@@ -300,11 +300,10 @@ class bishino extends Exchange {
         $response = $this->privateGetAccountInfo ($params);
         $result = array ( 'info' => $response['result'] );
         $balances = $response['result']['balances'];
-        for ($i = 0; $i < $balances; $i++) {
-            $balance = $balances[is_array ($balances) ? array_keys ($balances) : array ()[$i]];
-            $currency = $balance['asset'];
-            if (is_array ($this->currencies_by_id) && array_key_exists ($currency, $this->currencies_by_id))
-                $currency = $this->currencies_by_id[$currency]['code'];
+        $assets = is_array ($balances) ? array_keys ($balances) : array ();
+        for ($i = 0; $i < count ($assets); $i++) {
+            $currency = $assets[$i];
+            $balance = $balances[$currency];
             $account = array (
                 'free' => floatval ($balance['free']),
                 'used' => floatval ($balance['locked']),

@@ -8678,11 +8678,10 @@ module.exports = class bishino extends Exchange {
         let response = await this.privateGetAccountInfo (params);
         let result = { 'info': response['result'] };
         let balances = response['result']['balances'];
-        for (let i = 0; i < Object.keys (balances).length; i++) {
-            let balance = balances[Object.keys (balances)[i]];
-            let currency = balance['asset'];
-            if (currency in this.currencies_by_id)
-                currency = this.currencies_by_id[currency]['code'];
+        let assets = Object.keys (balances);
+        for (let i = 0; i < assets.length; i++) {
+            let currency = assets[i];
+            let balance = balances[currency];
             let account = {
                 'free': parseFloat (balance['free']),
                 'used': parseFloat (balance['locked']),
