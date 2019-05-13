@@ -288,8 +288,8 @@ class bishino (Exchange):
         response = await self.privateGetAccountInfo(params)
         result = {'info': response['result']}
         balances = response['result']['balances']
-        for i in range(0, len(balances)):
-            balance = balances[i]
+        for i in range(0, balances):
+            balance = balances[list(balances.keys())[i]]
             currency = balance['asset']
             if currency in self.currencies_by_id:
                 currency = self.currencies_by_id[currency]['code']
