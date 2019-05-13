@@ -82,7 +82,7 @@ The ccxt library currently supports the following 136 cryptocurrency exchange ma
 +------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+--------------------+
 | |binanceje|            | binanceje            | `Binance Jersey <https://www.binance.je/?ref=35047921>`__                                 | \*      | `API <https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md>`__       |                    |
 +------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+--------------------+
-| |bishino|              | bishino              | `Bishino <https://www.bibox.com/signPage?id=11114745&lang=en>`__                          | 1       | `API <https://docs.bishino.com>`__                                                                    |                    |
+| |bishino|              | bishino              | `Bishino <https://www.bishino.com>`__                                                     | 1       | `API <https://docs.bishino.com>`__                                                                    |                    |
 +------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+--------------------+
 | |bit2c|                | bit2c                | `Bit2C <https://www.bit2c.co.il>`__                                                       | \*      | `API <https://www.bit2c.co.il/home/api>`__                                                            |                    |
 +------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+--------------------+
@@ -3652,7 +3652,7 @@ Notes
 .. |binanceje| image:: https://user-images.githubusercontent.com/1294454/54874009-d526eb00-4df3-11e9-928c-ce6a2b914cd1.jpg
    :target: https://www.binance.je/?ref=35047921
 .. |bishino| image:: https://bishino.com/img/wolf.png
-   :target: https://www.bibox.com/signPage?id=11114745&lang=en
+   :target: https://www.bishino.com
 .. |bit2c| image:: https://user-images.githubusercontent.com/1294454/27766119-3593220e-5ece-11e7-8b3a-5a041f6bcc3f.jpg
    :target: https://www.bit2c.co.il
 .. |bitbank| image:: https://user-images.githubusercontent.com/1294454/37808081-b87f2d9c-2e59-11e8-894d-c1900b7584fe.jpg

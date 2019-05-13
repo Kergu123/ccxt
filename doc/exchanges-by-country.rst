@@ -234,7 +234,7 @@ The ccxt library currently supports the following cryptocurrency exchange market
 +----------------------------+------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+-----+
 | Russia                     | |yobit|                | yobit                | `YoBit <https://www.yobit.net>`__                                                         | 3       | `API <https://www.yobit.net/en/api/>`__                                                               |     |
 +----------------------------+------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+-----+
-| Seychelles                 | |bishino|              | bishino              | `Bishino <https://www.bibox.com/signPage?id=11114745&lang=en>`__                          | 1       | `API <https://docs.bishino.com>`__                                                                    |     |
+| Seychelles                 | |bishino|              | bishino              | `Bishino <https://www.bishino.com>`__                                                     | 1       | `API <https://docs.bishino.com>`__                                                                    |     |
 +----------------------------+------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+-----+
 | Seychelles                 | |bitmex|               | bitmex               | `BitMEX <https://www.bitmex.com/register/rm3C16>`__                                       | 1       | `API <https://www.bitmex.com/app/apiOverview>`__                                                      |     |
 +----------------------------+------------------------+----------------------+-------------------------------------------------------------------------------------------+---------+-------------------------------------------------------------------------------------------------------+-----+
@@ -554,7 +554,7 @@ The ccxt library currently supports the following cryptocurrency exchange market
 .. |yobit| image:: https://user-images.githubusercontent.com/1294454/27766910-cdcbfdae-5eea-11e7-9859-03fea873272d.jpg
    :target: https://www.yobit.net
 .. |bishino| image:: https://bishino.com/img/wolf.png
-   :target: https://www.bibox.com/signPage?id=11114745&lang=en
+   :target: https://www.bishino.com
 .. |bitmex| image:: https://user-images.githubusercontent.com/1294454/27766319-f653c6e6-5ed4-11e7-933d-f0bc3699ae8f.jpg
    :target: https://www.bitmex.com/register/rm3C16
 .. |kucoin| image:: https://user-images.githubusercontent.com/1294454/51909432-b0a72780-23dd-11e9-99ba-73d23c8d4eed.jpg

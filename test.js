@@ -1,6 +1,6 @@
 const ccxt = require('./ccxt');
 const bishino = require('./js/bishino');
-const exchange = new bishino ({
+const exchange = new ccxt.bishino ({
     'rateLimit': 10000,
     'options': {
         'adjustForTimeDifference': true,

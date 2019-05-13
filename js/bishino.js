@@ -22,7 +22,7 @@ module.exports = class bishino extends Exchange {
                 'cancelOrder': true,
                 'createOrder': true,
                 'fetchBidsAsks': true,
-                'fetchTickers': true,
+                'fetchTicker': true,
                 'fetchOHLCV': true,
                 'fetchTrades': true,
                 'fetchMyTrades': true,
@@ -223,6 +223,9 @@ module.exports = class bishino extends Exchange {
             'percentage': this.safeFloat (ticker, 'price_change_percent'),
             'baseVolume': this.safeFloat (ticker, 'base_volume'),
             'quoteVolume': this.safeFloat (ticker, 'quote_volume'),
+            'vwap': undefined,
+            'previousClose': undefined,
+            'average': undefined,
             'info': ticker,
         };
     }
