@@ -181,10 +181,8 @@ class bishino (Exchange):
                 maxPrice = self.safe_float(filter, 'max_price')
                 if (maxPrice is not None) and(maxPrice > 0):
                     entry['limits']['price']['max'] = maxPrice
-                entry['precision']['price'] = filter['tick_size']
             if 'LOT_SIZE' in filters:
                 filter = filters['LOT_SIZE']
-                entry['precision']['amount'] = filter['tick_size']
                 entry['limits']['amount'] = {
                     'min': self.safe_float(filter, 'min_qty'),
                     'max': self.safe_float(filter, 'max_qty'),
@@ -266,7 +264,6 @@ class bishino (Exchange):
         price = self.safe_float(trade, 'price')
         amount = self.safe_float(trade, 'qty')
         id = self.safe_string(trade, 'id')
-        side = self.safe_string(trade, 'side')
         symbol = self.safe_string(trade, 'pair').replace('_', '/')
         fee = {
             'cost': self.safe_float(trade, 'net_commission'),
@@ -279,7 +276,6 @@ class bishino (Exchange):
             'symbol': symbol,
             'id': id,
             'fee': fee,
-            'side': side.lower(),
             'price': price,
             'amount': amount,
             'cost': price * amount,

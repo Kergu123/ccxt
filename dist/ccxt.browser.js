@@ -8559,11 +8559,9 @@ module.exports = class bishino extends Exchange {
                 if ((maxPrice !== undefined) && (maxPrice > 0)) {
                     entry['limits']['price']['max'] = maxPrice;
                 }
-                entry['precision']['price'] = filter['tick_size'];
             }
             if ('LOT_SIZE' in filters) {
                 let filter = filters['LOT_SIZE'];
-                entry['precision']['amount'] = filter['tick_size'];
                 entry['limits']['amount'] = {
                     'min': this.safeFloat (filter, 'min_qty'),
                     'max': this.safeFloat (filter, 'max_qty'),
@@ -8655,7 +8653,6 @@ module.exports = class bishino extends Exchange {
         let price = this.safeFloat (trade, 'price');
         let amount = this.safeFloat (trade, 'qty');
         let id = this.safeString (trade, 'id');
-        let side = this.safeString (trade, 'side');
         let symbol = this.safeString (trade, 'pair').replace ('_', '/');
         let fee = {
             'cost': this.safeFloat (trade, 'net_commission'),
@@ -8668,7 +8665,6 @@ module.exports = class bishino extends Exchange {
             'symbol': symbol,
             'id': id,
             'fee': fee,
-            'side': side.toLowerCase (),
             'price': price,
             'amount': amount,
             'cost': price * amount,
