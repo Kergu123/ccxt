@@ -22,14 +22,13 @@ module.exports = class bishino extends Exchange {
                 'cancelOrder': true,
                 'createOrder': true,
                 'fetchBidsAsks': true,
-                'fetchTicker': true,
+                'fetchTickers': true,
                 'fetchOHLCV': true,
                 'fetchTrades': true,
                 'fetchMyTrades': true,
                 'fetchOrder': true,
                 'fetchOrders': true,
                 'fetchOpenOrders': true,
-                'fetchBalance': true,
                 'fetchClosedOrders': true,
                 'withdraw': true,
                 'fetchFundingFees': true,
@@ -64,21 +63,20 @@ module.exports = class bishino extends Exchange {
                 },
                 'private': {
                     'get': [
-                        'offer_by_id',
-                        'offers_by_account',
-                        'active_offers_by_account',
-                        'completed_offers_by_account',
-                        'trades_by_account',
+                        'order',
+                        'orders',
+                        'active_orders',
+                        'completed_orders',
+                        'fills',
+                        'balances',
                         'deposits',
                         'withdrawals',
-                        'account_info',
                     ],
                     'post': [
                         'auth/withdraw',
                         'auth/limit',
                         'auth/market',
-                        'auth/limit_trigger',
-                        'auth/market_trigger',
+                        'auth/trigger',
                         'auth/stop',
                         'auth/icebergs',
                         'auth/cancel',
@@ -181,9 +179,11 @@ module.exports = class bishino extends Exchange {
                 if ((maxPrice !== undefined) && (maxPrice > 0)) {
                     entry['limits']['price']['max'] = maxPrice;
                 }
+                entry['precision']['price'] = filter['tick_size'];
             }
             if ('LOT_SIZE' in filters) {
                 let filter = filters['LOT_SIZE'];
+                entry['precision']['amount'] = filter['tick_size'];
                 entry['limits']['amount'] = {
                     'min': this.safeFloat (filter, 'min_qty'),
                     'max': this.safeFloat (filter, 'max_qty'),
@@ -223,9 +223,6 @@ module.exports = class bishino extends Exchange {
             'percentage': this.safeFloat (ticker, 'price_change_percent'),
             'baseVolume': this.safeFloat (ticker, 'base_volume'),
             'quoteVolume': this.safeFloat (ticker, 'quote_volume'),
-            'vwap': undefined,
-            'previousClose': undefined,
-            'average': undefined,
             'info': ticker,
         };
     }
@@ -275,6 +272,7 @@ module.exports = class bishino extends Exchange {
         let price = this.safeFloat (trade, 'price');
         let amount = this.safeFloat (trade, 'qty');
         let id = this.safeString (trade, 'id');
+        let side = this.safeString (trade, 'side');
         let symbol = this.safeString (trade, 'pair').replace ('_', '/');
         let fee = {
             'cost': this.safeFloat (trade, 'net_commission'),
@@ -288,29 +286,10 @@ module.exports = class bishino extends Exchange {
             'id': id,
             'fee': fee,
             'price': price,
+            'side': side,
             'amount': amount,
             'cost': price * amount,
         };
-    }
-
-    async fetchBalance (params = {}) {
-        await this.loadMarkets ();
-        let response = await this.privateGetAccountInfo (params);
-        let result = { 'info': response['result'] };
-        let balances = response['result']['balances'];
-        let assets = Object.keys (balances);
-        for (let i = 0; i < assets.length; i++) {
-            let currency = assets[i];
-            let balance = balances[currency];
-            let account = {
-                'free': parseFloat (balance['free']),
-                'used': parseFloat (balance['locked']),
-                'total': 0.0,
-            };
-            account['total'] = this.sum (account['free'], account['used']);
-            result[currency] = account;
-        }
-        return this.parseBalance (result);
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
@@ -342,7 +321,7 @@ module.exports = class bishino extends Exchange {
 
     parseOrder (order, market = undefined) {
         let status = this.parseStatus (this.safeString (order, 'status'));
-        let symbol = this.safeString (order, 'pair').replace ('_', '/');
+        let symbol = this.findSymbol (this.safeString (order, 'pair'), market);
         let timestamp = order['time'];
         let price = this.safeFloat (order, 'price');
         let amount = this.safeFloat (order, 'qty_orig');
@@ -389,7 +368,7 @@ module.exports = class bishino extends Exchange {
         let request = {
             'id': id,
         };
-        let response = await this.privateGetOfferById (this.extend (request, params));
+        let response = await this.privateGetOrder (this.extend (request, params));
         return this.parseOrder (response['result']);
     }
 
@@ -403,7 +382,7 @@ module.exports = class bishino extends Exchange {
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        let response = await this.privateGetOffersByAccount (this.extend (request, params));
+        let response = await this.privateGetOrders (this.extend (request, params));
         return this.parseOrders (response['result'], market, since, limit);
     }
 
@@ -420,7 +399,7 @@ module.exports = class bishino extends Exchange {
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        let response = await this.privateGetActiveOffersByAccount (this.extend (request, params));
+        let response = await this.privateGetActiveOrders (this.extend (request, params));
         return this.parseOrders (response['result'], market, since, limit);
     }
 
@@ -434,7 +413,7 @@ module.exports = class bishino extends Exchange {
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        let response = await this.privateGetCompletedOffersByAccount (this.extend (request, params));
+        let response = await this.privateGetCompletedOrders (this.extend (request, params));
         return this.parseOrders (response['result'], market, since, limit);
     }
 
@@ -446,7 +425,7 @@ module.exports = class bishino extends Exchange {
             request['limit'] = limit;
         if (since !== undefined)
             request['start'] = since;
-        let response = await this.privateGetTradesByAccount (this.extend (request, params));
+        let response = await this.privateGetFills (this.extend (request, params));
         return this.parseTrades (response['result'], market, since, limit);
     }
 
@@ -526,12 +505,12 @@ module.exports = class bishino extends Exchange {
             method = 'privatePostAuthMarket';
         } else if (uppercaseType === 'STOP_LOSS') {
             order['trigger_price'] = stopPrice;
-            method = 'privatePostAuthMarketTrigger';
+            method = 'privatePostAuthTrigger';
             triggerPriceIsRequired = true;
         } else if (uppercaseType === 'STOP_LOSS_LIMIT') {
             order['trigger_price'] = stopPrice;
             order['price'] = price;
-            method = 'privatePostAuthLimitTrigger';
+            method = 'privatePostAuthTrigger';
             triggerPriceIsRequired = true;
             priceIsRequired = true;
         } else if (uppercaseType === 'TAKE_PROFIT') {
@@ -541,7 +520,7 @@ module.exports = class bishino extends Exchange {
         } else if (uppercaseType === 'TAKE_PROFIT_LIMIT') {
             order['trigger_price'] = stopPrice;
             order['price'] = price;
-            method = 'privatePostAuthLimitTrigger';
+            method = 'privatePostAuthTrigger';
             triggerPriceIsRequired = true;
             priceIsRequired = true;
         } else if (uppercaseType === 'TRIGGER') {
@@ -567,8 +546,33 @@ module.exports = class bishino extends Exchange {
             throw new InvalidOrder ('createOrder method requires a icebergs as an extra param for a ' + type + ' order');
         }
         let response = await this[method] (this.extend (order, params));
-        return this.parseOrder (response['result'], market);
+        return this.parseOrder (response['result']['order'], market);
     }
+
+    async fetchBalance (params = {}) {
+       await this.loadMarkets ();
+       const request = {};
+       const response = await this.privateGetBalances (this.extend (request, params));
+       const balances = response['result'];
+       const result = { 'info': balances };
+       const currencies = Object.keys(balances)
+       for (let i = 0; i < currencies.length; i++) {
+           const currencyId = currencies[i];
+           const balance = balances[currencyId];
+           const code = this.safeCurrencyCode (currencyId);
+           const account = this.account ();
+           const free_cash = this.safeFloat (balance, 'free');
+           const locked_cash = this.safeFloat (balance, 'locked');
+           const withdrawn_cash = this.safeFloat (balance, 'withdrawn');
+           const free_margin = this.safeFloat (balance, 'margin');
+           const free_total = this.safeFloat (free_cash + free_margin);
+           const total = this.safeFloat (free_total + locked_cash);
+           account['free'] = free_total;
+           account['total'] = total;
+           result[code] = account;
+       }
+       return this.parseBalance (result);
+   }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
         await this.loadMarkets ();
